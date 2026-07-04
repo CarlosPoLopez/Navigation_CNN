@@ -60,15 +60,21 @@ The project has **two trained variants**, both used in the thesis:
   distributed** (five checkpoints, ~0.6 GB); reproduce it by training the folds (see
   [Workflow](#workflow)) and evaluating with `--k 5`.
 
-To use the published single model:
+Fully self-contained demo — no dataset needed:
 
 ```bash
 # 1. download the weights into runs/final_model/fold0/best.pt
 python download_model.py
 
-# 2. solve a maze — a dataset .npz, or a raw 2D .npy — and write an overlay PNG next to it
-python predict.py --input maze.npz --ckpt_dir runs/final_model --k 1
+# 2. generate a random maze (1=wall, 0=corridor), saved as maze.npy (+ a preview PNG)
+python generate_maze.py --out maze.npy --png
+
+# 3. solve it — writes pred_maze_single.png (maze + predicted path) next to the input
+python predict.py --input maze.npy --ckpt_dir runs/final_model --k 1
 ```
+
+`predict.py` also accepts a dataset `.npz` (from Part 1, with a reference `solucion`); in
+that case it additionally reports Dice / clDice / solved against the ground truth.
 
 ## Layout
 
@@ -78,6 +84,7 @@ dataset.py               Core: data loading and augmentation
 train.py                 Core: training (one fold)
 net_test.py              Core: evaluation on the frozen test set (single / ensemble)
 predict.py               Core: inference on a single maze (.npz or 2D .npy)
+generate_maze.py         Generates a random maze (.npy) to feed predict.py
 download_model.py        Fetches the pretrained final model into runs/final_model/
 analysis/                Model selection and analysis (not needed to use the network)
   eval_val.py            Validation metrics for choosing between configurations
@@ -109,7 +116,9 @@ data/
 runs/                   checkpoints and results (created by training)
 ```
 
-Any of these can be overridden with `--data_dir`, `--test_ids`, `--ckpt_dir`, etc.
+Any of these can be overridden with `--data_dir`, `--test_ids`, `--ckpt_dir`, etc. The
+dataset is only needed to **train or evaluate**; to just try the pretrained model you do
+not need it — generate inputs with `generate_maze.py` (see *Pretrained model* above).
 
 ## Workflow
 
