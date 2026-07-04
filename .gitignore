@@ -1,0 +1,22 @@
+# ── Datos y salidas (demasiado grandes para git) ─────────
+*.npz
+*.npy
+runs/
+Dataset_Matrices/
+Logs_SLURM/
+*.png
+*.jpg
+*.csv
+
+# ── Python ───────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+venv/
+.venv/
+
+# ── Sistema ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
