@@ -30,6 +30,12 @@ The input has **3 channels** (maze, entry marker, exit marker — *goal-conditio
 the same network solves different entry–exit pairs on the same maze. The working
 resolution is **256×256**.
 
+![Network prediction vs. ground truth](assets/prediction_vs_groundtruth.png)
+
+*Left to right: an input maze, its reference solution from Part 1, and the U-Net's
+prediction — green = path correctly found, red/blue = small deviations. Here the predicted
+path connects entry to exit (**solved**), with Dice 0.89 / clDice 0.91.*
+
 ## Architecture
 
 - **U-Net** encoder–decoder with skip connections (`unet.py`).
@@ -74,6 +80,11 @@ python generate_maze.py --out maze.npy --png
 python predict.py --input maze.npy --ckpt_dir runs/final_model --k 1
 ```
 
+![Solving a freshly generated maze](assets/prediction_generated_maze.png)
+
+*Output of step 3: on a maze it has never seen, the network draws a connected path from
+the entry (bottom-left) to the exit (top-right).*
+
 `predict.py` also accepts a dataset `.npz` (from Part 1, with a reference `solution`); in
 that case it additionally reports Dice / clDice / solved against the ground truth.
 
@@ -93,7 +104,6 @@ analysis/                Model selection and analysis (not needed to use the net
   compare_configs.py     Comparison of configurations (validation only)
   kfold_summary.py       Aggregated summary of k-fold results
   robustness_analysis.py Robustness analysis of the model-selection criterion
-slurm/                   SBATCH scripts for the cluster (CESGA)
 requirements.txt
 ```
 
@@ -180,16 +190,12 @@ python predict.py --input maze.npy --ckpt_dir runs/my_model --k 1
 
 ## Running on your PC vs. on an HPC cluster
 
-- **Locally**: everything runs with the commands above (CUDA GPU used automatically if
-  available, otherwise CPU). Training the full pipeline on CPU is slow; a single `predict.py`
-  is fast on CPU.
-- **On a cluster (SLURM)**, the `slurm/` folder has submit scripts (one per stage: train,
-  test, eval, full grid, final model). They are the author's **CESGA** scripts kept as a
-  template. Submit them **from the repository root**, e.g. `sbatch slurm/sbatch_train.sh`.
-  Each script has an *"Adapt to your environment"* block at the top: set `PYTHON` (your
-  interpreter/conda env), `CODE` (defaults to the submit dir), `DATA`, `TEST_IDS`, `RUNS`,
-  or `export` them beforehand. The `module load cesga/...` lines and the `#SBATCH`
-  partitions/GPU types are cluster-specific — replace them with your site's equivalents.
+Everything runs with the commands above (a CUDA GPU is used automatically if available,
+otherwise CPU). A single `predict.py` is fast on CPU; training the full pipeline on CPU is
+slow, so the k-fold hyperparameter search of the thesis was run on the **CESGA** cluster
+(SLURM). To reproduce that at scale, `analysis/dispatch_grid.py` trains the whole
+`lr × batch × fold` grid across several GPUs; point it at your paths with the `PYTHON`,
+`NET_DIR`, `DATA_DIR`, `TEST_IDS` and `RUNS_ROOT` environment variables (see its header).
 
 ---
 

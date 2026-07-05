@@ -7,6 +7,9 @@ Logs_SLURM/
 *.png
 *.jpg
 *.csv
+# keep the README example images
+!assets/
+!assets/*.png
 
 # ── Python ───────────────────────────────────────────────
 __pycache__/

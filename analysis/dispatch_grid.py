@@ -25,7 +25,7 @@ from collections import deque
 # Paths. All overridable via environment variables so the same script runs on your PC and
 # on an HPC cluster. Defaults are relative to the repository root (this file lives in
 # analysis/), so with a data/ and runs/ layout it works out of the box; on a cluster,
-# export PYTHON / NET_DIR / DATA_DIR / TEST_IDS / RUNS_ROOT (see slurm/sbatch_grid5_deep.sh).
+# export PYTHON / NET_DIR / DATA_DIR / TEST_IDS / RUNS_ROOT to point at your paths.
 _REPO   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PY      = os.environ.get('PYTHON', sys.executable)             # python that launches train.py
 NET     = os.environ.get('NET_DIR', _REPO)                     # folder where train.py lives
