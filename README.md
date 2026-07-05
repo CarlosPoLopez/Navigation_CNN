@@ -144,7 +144,7 @@ training.
 python dataset.py --data_dir data/Dataset_Matrices --output data/test_ids.txt
 ```
 
-**2. Train** the k folds of a configuration (repeat `--fold 0..4`, or use the SLURM array):
+**2. Train** the k folds of a configuration (repeat with `--fold 0`, `1`, …, `4`):
 
 ```bash
 python train.py --ckpt_dir runs/my_model \

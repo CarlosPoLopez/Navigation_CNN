@@ -1,8 +1,8 @@
 """Evaluates one or several models on their VALIDATION set (not the test).
 
-Used to CHOOSE between configurations (e.g. the losses of stage C) with a metric
-aligned with the goal - % solved mazes and clDice - which val_dice (the only thing in
-curve.csv) does not capture. The frozen TEST is NOT touched.
+Used to CHOOSE between configurations (e.g. different learning rates or batch sizes) with
+a metric aligned with the goal - % solved mazes and clDice - which val_dice (the only thing
+in curve.csv) does not capture. The frozen TEST is NOT touched.
 
 Correctness key: it rebuilds EXACTLY the same validation split that training used (same
 --k, --fold, --seed and the same test exclusion), so it is evaluated on the same
@@ -13,8 +13,8 @@ Model: ONE fold (not ensemble), because the screening probes are single-fold.
 Loads <ckpt_dir>/fold<fold>/best.pt.
 
 Usage:
-  python eval_val.py --glob "runs/stageC/lr1e-4_bs8_goal*" --goal_channels
-  python eval_val.py --ckpt_dir runs/stageC/lr1e-4_bs8_goal_tv0.7_w0 --goal_channels
+  python eval_val.py --glob "runs/grid/lr*_bs*"
+  python eval_val.py --ckpt_dir runs/grid/lr1e-4_bs8
 
 Outputs:
   - <ckpt_dir>/val_metrics.csv  (one row per sample: dice/cldice/solved)
