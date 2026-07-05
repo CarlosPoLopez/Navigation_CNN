@@ -205,3 +205,4 @@ if __name__ == '__main__':
     p.add_argument('--out_dir', default=None,
                    help='where to write comparison.csv/.png (default: the common parent of the compared folders).')
     main(p.parse_args())
+

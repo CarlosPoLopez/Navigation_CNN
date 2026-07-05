@@ -281,3 +281,4 @@ if __name__ == '__main__':
     p.add_argument('--save_npy', action='store_true',
                    help='also saves the .npy mask (original resolution) besides the PNG.')
     main(p.parse_args())
+

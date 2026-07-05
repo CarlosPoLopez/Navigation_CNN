@@ -263,3 +263,4 @@ if __name__ == '__main__':
         png = os.path.splitext(args.out)[0] + '.png'
         fig.savefig(png, dpi=130); plt.close(fig)
         print(f'preview -> {png}')
+

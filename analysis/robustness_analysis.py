@@ -410,3 +410,4 @@ if __name__ == '__main__':
     args = p.parse_args()
     args.higher_better = (args.col == 'val_dice')
     main(args)
+

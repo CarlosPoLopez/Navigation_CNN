@@ -330,3 +330,4 @@ if __name__ == '__main__':
     p.add_argument('--margin',     type=int,   default=8,
                    help='tolerance (px) at entry/exit for the solving BFS.')
     main(p.parse_args())
+

@@ -138,3 +138,4 @@ if __name__ == '__main__':
     p.add_argument('--output', default='test_ids.txt')
     a = p.parse_args()
     create_test_split(a.data_dir, a.test_frac, a.seed, a.output)
+

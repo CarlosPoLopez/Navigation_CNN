@@ -168,3 +168,4 @@ if __name__ == '__main__':
     if not args.glob and not args.ckpt_dir:
         p.error('provide --ckpt_dir or --glob.')
     main(args)
+
