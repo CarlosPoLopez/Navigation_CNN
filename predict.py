@@ -2,7 +2,7 @@
 
 Meant to try ARBITRARY mazes (e.g. generated from maps in another project), with or
 without a reference solution:
-  - WITH solution (.npz with 'solucion'): TP/FN/FP overlay + Dice/clDice/solved.
+  - WITH solution (.npz with 'solution'): TP/FN/FP overlay + Dice/clDice/solved.
   - WITHOUT solution: only predicts; draws the path over the maze and checks with a
     4-connected BFS whether it connects the ENTRY room (top-left corner) with the EXIT
     one (bottom-right corner), using the same 50x50 goal-conditioning markers.
@@ -13,8 +13,8 @@ By default only the overlay PNG is saved; with --save_npy the mask, rescaled bac
 ORIGINAL resolution of the maze, is also saved as .npy (reusable in your pipeline).
 
 Input (--input):
-  *.npz  -> dataset format: key 'laberinto' (field F, <0=wall) and, optionally,
-            'solucion' (field u, >=THRESHOLD=path).
+  *.npz  -> dataset format: key 'maze' (field F, <0=wall) and, optionally,
+            'solution' (field u, >=THRESHOLD=path).
   *.npy  -> plain 2D maze matrix (no solution). Wall rule via --wall:
             auto (default: if there are negatives -> '<0', else '>0.5'), neg (<0),
             pos (>0), nonzero.
@@ -44,7 +44,7 @@ from unet import UNet
 # Reuse the metrics and error overlay from the test (same definition, no divergence).
 from net_test import dice_coef, cldice, maze_solved, overlay_error
 
-THRESHOLD = 0.727      # reads the .npz 'solucion' field into a binary path mask (data)
+THRESHOLD = 0.727      # reads the .npz 'solution' field into a binary path mask (data)
 IMG_SIZE = 256         # fixed working resolution (same as training)
 PRED_THRESHOLD = 0.5   # fixed binarization threshold for the network output
 CLOSING = 1            # fixed morphological closing radius (post-processing)
@@ -59,14 +59,14 @@ def _square(h, w, r0, r1, c0, c1):
 def load_maze(path, wall):
     """Returns (maze_bin HxW {0,1}, solution_bin or None) at ORIGINAL resolution.
 
-    .npz: uses 'laberinto' (<0=wall) and, if present, 'solucion' (>=THRESHOLD=path).
+    .npz: uses 'maze' (<0=wall) and, if present, 'solution' (>=THRESHOLD=path).
     .npy / 2D array: plain maze matrix; wall according to `wall`."""
     if path.endswith('.npz'):
         data = np.load(path)
-        if 'laberinto' not in data:
-            raise SystemExit(f"{path}: .npz without 'laberinto' key (keys: {list(data.keys())})")
-        maze = (data['laberinto'] < 0).astype(np.float32)
-        sol = (data['solucion'] >= THRESHOLD).astype(np.float32) if 'solucion' in data else None
+        if 'maze' not in data:
+            raise SystemExit(f"{path}: .npz without 'maze' key (keys: {list(data.keys())})")
+        maze = (data['maze'] < 0).astype(np.float32)
+        sol = (data['solution'] >= THRESHOLD).astype(np.float32) if 'solution' in data else None
         return maze, sol
     arr = np.asarray(np.load(path)).astype(np.float32)
     if arr.ndim != 2:

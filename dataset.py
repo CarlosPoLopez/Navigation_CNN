@@ -22,9 +22,9 @@ def _square(h, w, r0, r1, c0, c1):
 
 # Finds the sample files and sorts them alphabetically.
 def list_samples(data_dir):
-    files = sorted(glob.glob(os.path.join(data_dir, 'muestra_*.npz')))
+    files = sorted(glob.glob(os.path.join(data_dir, 'sample_*.npz')))
     if not files:
-        raise FileNotFoundError(f'No muestra_*.npz files found in {data_dir}')
+        raise FileNotFoundError(f'No sample_*.npz files found in {data_dir}')
     return files
 
 
@@ -101,9 +101,9 @@ class MazeDataset(Dataset):
         data = np.load(self.files[idx])
 
         # Input: maze as field F (-3=wall, 0=corridor) -> binary (1=wall, 0=corridor)
-        maze = (data['laberinto'] < 0).astype(np.float32)
+        maze = (data['maze'] < 0).astype(np.float32)
         # Label: final field u -> binary (1=path, 0=background)
-        solution = (data['solucion'] >= THRESHOLD).astype(np.float32)
+        solution = (data['solution'] >= THRESHOLD).astype(np.float32)
 
         # 3-channel input (goal-conditioning, fixed): the maze plus a 50x50 square at the
         # entry "room" [5:55,5:55] and the exit one [H-55:H-5, W-55:W-5]. Built BEFORE

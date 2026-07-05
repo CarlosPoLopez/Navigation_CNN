@@ -42,11 +42,11 @@ resolution is **256×256**.
 
 ## Evaluation
 
-Besides the usual segmentation metrics (Dice, IoU), the **connectivity of the path** is
-evaluated with a BFS check: a maze counts as *solved* only if a continuous path exists
-between entry and exit in the prediction. Model selection is done by **k-fold
-cross-validation** over the learning-rate × batch-size grid, comparing the single model
-against the fold ensemble.
+Beyond pixel overlap (**Dice**), the metrics target the path's **topology**: **clDice**
+(centerline Dice, sensitive to breaks) and a **solved** rate — a maze counts as *solved*
+only if a continuous path connects entry and exit in the prediction (checked with a BFS).
+Model selection is done by **k-fold cross-validation** over the learning-rate × batch-size
+grid, comparing the single model against the fold ensemble.
 
 ## Pretrained model (no training needed)
 
@@ -74,7 +74,7 @@ python generate_maze.py --out maze.npy --png
 python predict.py --input maze.npy --ckpt_dir runs/final_model --k 1
 ```
 
-`predict.py` also accepts a dataset `.npz` (from Part 1, with a reference `solucion`); in
+`predict.py` also accepts a dataset `.npz` (from Part 1, with a reference `solution`); in
 that case it additionally reports Dice / clDice / solved against the ground truth.
 
 ## Layout
@@ -100,19 +100,19 @@ requirements.txt
 ## Data and expected layout
 
 The dataset is produced by **Part 1** and is not versioned here. Each sample is an
-`.npz` file named `muestra_<id>.npz` with two arrays:
+`.npz` file named `sample_<id>.npz` with two arrays:
 
-| key         | meaning                                                      |
-|-------------|-------------------------------------------------------------|
-| `laberinto` | maze as a field F (`< 0` = wall, `0` = corridor)            |
-| `solucion`  | solution field u (`>= 0.727` = path) — the training target |
+| key        | meaning                                                     |
+|------------|-------------------------------------------------------------|
+| `maze`     | maze as a field F (`< 0` = wall, `0` = corridor)            |
+| `solution` | solution field u (`>= 0.727` = path) — the training target |
 
 All paths default to a repository-relative layout, so the simplest setup is to run every
 command **from the repository root** with this structure (both are git-ignored):
 
 ```
 data/
-  Dataset_Matrices/     muestra_*.npz  (the dataset)
+  Dataset_Matrices/     sample_*.npz  (the dataset)
   test_ids.txt          list of held-out test samples (created in step 1)
 runs/                   checkpoints and results (created by training)
 ```

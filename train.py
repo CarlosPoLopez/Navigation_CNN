@@ -209,7 +209,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir',   default='data/Dataset_Matrices',
-                        help='folder with the muestra_*.npz dataset (from Part 1).')
+                        help='folder with the sample_*.npz dataset (from Part 1).')
     parser.add_argument('--test_ids',   default='data/test_ids.txt',
                         help='file listing the frozen test samples (create it once with dataset.py).')
     parser.add_argument('--ckpt_dir',   default='runs/baseline',
