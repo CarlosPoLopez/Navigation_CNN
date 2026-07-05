@@ -11,35 +11,28 @@ from unet import UNet
 
 
 # -- Loss ------------------------------------------------------------------------
+# The total loss is a fixed sum of three complementary terms (thesis eq. loss-total):
+#   L = L_BCE (pixel) + L_Tversky (region) + L_clDice (connectivity).
 
-# Measures the overlap between the predicted and the real image (0,1).
-def dice_loss(pred, target, eps=1e-6):
-    pred = torch.sigmoid(pred)
-    inter = (pred * target).sum(dim=(1, 2, 3))
-    union = pred.sum(dim=(1, 2, 3)) + target.sum(dim=(1, 2, 3))
-    return 1 - (2 * inter + eps) / (union + eps)
-
-
-# Tversky (Salehi et al. 2017): generalizes Dice by separating the two error types.
-# Dice treats a false positive (painting extra path) the same as a false negative
-# (leaving a gap), but gaps are what break connectivity and leave the maze unsolved.
-# With beta > alpha the FN weigh more than the FP and the network prefers to fill in
-# rather than to trim. With alpha = beta = 0.5 it is exactly Dice.
-def tversky_loss(pred, target, alpha=0.3, beta=0.7, gamma=1.0, eps=1e-6):
-    # gamma=1 -> Tversky (Salehi 2017); gamma>1 -> Focal-Tversky FTL=(1-TI)^(1/gamma)
-    # (Abraham 2019, best gamma=4/3): concentrates learning on hard regions.
+# Tversky loss (Salehi et al. 2017): generalizes Dice by weighting the two error types
+# differently. Dice treats a false positive (painting extra path) the same as a false
+# negative (leaving a gap), but gaps are what break connectivity and leave the maze
+# unsolved. With beta > alpha the FN weigh more than the FP, so the network prefers to
+# fill in rather than to trim. With alpha = beta = 0.5 it reduces to Dice; the thesis
+# uses alpha = 0.3, beta = 0.7.
+def tversky_loss(pred, target, alpha=0.3, beta=0.7, eps=1e-6):
     pred = torch.sigmoid(pred)
     tp = (pred * target).sum(dim=(1, 2, 3))
     fp = (pred * (1 - target)).sum(dim=(1, 2, 3))
     fn = ((1 - pred) * target).sum(dim=(1, 2, 3))
     ti = (tp + eps) / (tp + alpha * fp + beta * fn + eps)
-    return (1 - ti) ** (1.0 / gamma)
+    return 1 - ti
 
 
 # -- Soft (differentiable) clDice ------------------------------------------------
-# BCE+Dice optimize the pixel overlap, NOT connectivity: the predicted path comes out
-# with the right shape but full of micro-cuts, so it never joins entry and exit
-# (solved rate 0% on the first grid). clDice measures the overlap of the CENTERLINE
+# BCE and Tversky optimize the pixel overlap, NOT connectivity: the predicted path comes
+# out with the right shape but full of micro-cuts, so it never joins entry and exit
+# (solved rate 0% without this term). clDice measures the overlap of the CENTERLINE
 # (skeleton), so it penalizes those breaks. Here we use the "soft" version of Shit
 # et al. (2021): the skeleton is approximated with morphology via min/max-pooling,
 # which is differentiable (skimage's skeletonize used in net_test.py is not, and only
@@ -79,45 +72,34 @@ def cldice_loss(logits, target, iters=10, eps=1e-6):
     return 1 - 2 * tprec * tsens / (tprec + tsens + eps)
 
 
-def loss_fn(logits, target, cldice_w=0.0, tversky_b=0.0, ftl_gamma=1.0):
-    # Binary cross-entropy. with_logits applies sigmoid to the raw values from the network.
+def loss_fn(logits, target):
+    # Total loss = BCE (pixel) + Tversky (region) + clDice (connectivity). The three
+    # terms always contribute (fixed combination, thesis eq. loss-total): BCE gives a
+    # smooth pixel-wise gradient everywhere, Tversky handles the global shape and the
+    # class imbalance, and clDice enforces the continuity of the path.
     bce = nn.functional.binary_cross_entropy_with_logits(logits, target)
-    # Region term: Dice (baseline) or Tversky if tversky_b > 0. It REPLACES Dice,
-    # it is not summed: they are the same family (tversky_b=0.5 == Dice) and having both
-    # would be redundant.
-    if tversky_b > 0:
-        region = tversky_loss(logits, target, alpha=1 - tversky_b, beta=tversky_b,
-                              gamma=ftl_gamma).mean()
-    else:
-        region = dice_loss(logits, target).mean()
-    # BCE gives a smooth pixel-wise gradient everywhere; the region term takes care of
-    # the global shape and the class imbalance.
-    loss = bce + region
-    # clDice (optional, weight cldice_w): adds connectivity awareness. cldice_w=0 -> exact baseline.
-    if cldice_w > 0:
-        loss = loss + cldice_w * cldice_loss(logits, target).mean()
-    return loss
+    region = tversky_loss(logits, target).mean()
+    connectivity = cldice_loss(logits, target).mean()
+    return bce + region + connectivity
 
 
 # -- Train / val loops -----------------------------------------------------------
 
-def run_epoch(model, loader, optimizer, device, train, cldice_w=0.0, tversky_b=0.0, ftl_gamma=1.0):
+def run_epoch(model, loader, optimizer, device, train):
     model.train(train)
     total, total_dice = 0.0, 0.0
     with torch.set_grad_enabled(train):  # PyTorch graph for computing gradients
         for x, y in loader:  # each iteration is a batch
             x, y = x.to(device), y.to(device)
             logits = model(x)  # FORWARD: draws the path
-            loss = loss_fn(logits, y, cldice_w, tversky_b, ftl_gamma)  # COMPARE drawn vs real path
+            loss = loss_fn(logits, y)  # COMPARE drawn vs real path
             if train:
                 optimizer.zero_grad()
                 loss.backward()  # BACKPROPAGATION: gradient of each weight w.r.t. the loss
                 optimizer.step()  # updates the weights
             total += loss.item()
-            # "Hard" Dice coefficient (threshold 0.5), no gradient. It is the COMMON
-            # metric to compare configs with different losses: val_loss is not
-            # comparable between BCE+Dice and BCE+Tversky+clDice (different scales), but
-            # the hard Dice is.
+            # "Hard" Dice coefficient (threshold 0.5), no gradient — a segmentation-quality
+            # metric logged alongside the loss (val_dice column of curve.csv).
             with torch.no_grad():
                 pred_bin = (torch.sigmoid(logits) > 0.5).float()
                 inter = (pred_bin * y).sum()
@@ -192,9 +174,7 @@ def main(args):
 
     best_val = float('inf')
     for epoch in range(1, args.epochs + 1):
-        train_loss, _ = run_epoch(model, train_loader, optimizer, device, train=True,
-                                  cldice_w=args.cldice_w, tversky_b=args.tversky_b,
-                                  ftl_gamma=args.ftl_gamma)
+        train_loss, _ = run_epoch(model, train_loader, optimizer, device, train=True)
 
         if no_val:
             # No validation: the scheduler follows train_loss and the model of every
@@ -208,9 +188,7 @@ def main(args):
                         'val_loss': float('nan'), 'train_loss': train_loss,
                         'fold': -1}, path)
         else:
-            val_loss, val_dice = run_epoch(model, val_loader, optimizer, device, train=False,
-                                           cldice_w=args.cldice_w, tversky_b=args.tversky_b,
-                                           ftl_gamma=args.ftl_gamma)
+            val_loss, val_dice = run_epoch(model, val_loader, optimizer, device, train=False)
             scheduler.step(val_loss)
             print(f'Epoch {epoch:3d}/{args.epochs}  '
                   f'train={train_loss:.4f}  val={val_loss:.4f}  dice={val_dice:.4f}')
@@ -248,17 +226,6 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int,   default=4)
     parser.add_argument('--epochs',     type=int,   default=50)
     parser.add_argument('--lr',         type=float, default=1e-4)
-    parser.add_argument('--cldice_w',   type=float, default=0.0,
-                        help='weight of the clDice term in the loss. 0 = BCE+Dice baseline; '
-                             '>0 adds connectivity awareness (e.g. 0.5 or 1.0).')
-    parser.add_argument('--tversky_b',  type=float, default=0.0,
-                        help='Tversky beta (alpha = 1-beta). 0 = use Dice (baseline); '
-                             '>0 replaces Dice with Tversky (0.7 penalizes FN/gaps; '
-                             '0.5 equals Dice).')
-    parser.add_argument('--ftl_gamma',  type=float, default=1.0,
-                        help='Focal-Tversky gamma: FTL=(1-TI)^(1/gamma). 1.0 = plain Tversky; '
-                             '4/3~=1.333 = focal (Abraham 2019, focuses on hard regions). Only '
-                             'applies if tversky_b>0.')
     parser.add_argument('--goal_channels', action='store_true',
                         help='goal-conditions the network: adds 2 input channels with the '
                              '(fixed) entry and exit of the maze. Input 1->3 channels. '

@@ -11,7 +11,7 @@
 #SBATCH -p short
 
 # Trains the k=5 folds of the U-Net with the chosen config
-# (lr1e-4 bs8, 256, 140ep, goal + Tversky0.7 + clDice1), 5 folds in PARALLEL on one node
+# (lr1e-4 bs8, 256, 140ep, goal-conditioning), 5 folds in PARALLEL on one node
 # (one per GPU). Then runs the ENSEMBLE test. Requires a 5-GPU node.
 # Submit from the repository root:  sbatch slurm/sbatch_deep5_final.sh
 # Results -> $RUNS/deep5_final/lr1e-4_bs8/fold*/best.pt ; test metrics + overlays in that folder.
@@ -34,7 +34,7 @@ for f in 0 1 2 3 4; do
   CUDA_VISIBLE_DEVICES=$f "${PYTHON}" "${CODE}/train.py" \
       --data_dir "${DATA}" --test_ids "${TESTIDS}" --ckpt_dir "${CKPT}" \
       --k 5 --fold $f --img_size 256 --batch_size 8 --epochs 140 \
-      --lr 1e-4 --cldice_w 1 --tversky_b 0.7 --goal_channels \
+      --lr 1e-4 --goal_channels \
       > "$LOGDIR/deep5_final_fold${f}.log" 2>&1 &
 done
 wait

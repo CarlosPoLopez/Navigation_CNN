@@ -6,7 +6,7 @@ time (one per GPU via CUDA_VISIBLE_DEVICES) and pulls jobs from a queue until it
 empty.
 
 Grid: 3 lr x 4 bs x 5 folds = 60 trainings of 140 epochs at 256x256, with the
-loss/input config FIXED in stage C (goal-conditioning + Tversky(0.7) + clDice w1).
+fixed input config (goal-conditioning) and the fixed loss (BCE + Tversky + clDice).
 At 256 each one is ~1.5 h -> 60/5 = 12 rounds ~= 18 h makespan (5 GPUs); resumable.
 Selection only needs to rank lr x bs; the winner is retrained separately. bs2 and bs4
 are for the robustness section of the report (small batch), not for selecting; bs8 vs
@@ -42,10 +42,7 @@ BSS    = os.environ.get('BSS', '16,8,4,2').split(',')         # bs16 FIRST; bs2/
 FOLDS  = [0, 1, 2, 3, 4]
 EPOCHS = '140'
 NGPU   = int(os.environ.get('NGPU', '8'))
-# Loss/input config FIXED in stage C (not swept): goal-conditioning + Tversky(0.7) +
-# clDice w1. Overridable via environment, but these are the good values.
-CLDICE_W      = os.environ.get('CLDICE_W', '1')
-TVERSKY_B     = os.environ.get('TVERSKY_B', '0.7')
+# Input config: goal-conditioning ON (the loss is fixed in train.py: BCE+Tversky+clDice).
 GOAL_CHANNELS = os.environ.get('GOAL_CHANNELS', '1') == '1'
 IMG_SIZE      = os.environ.get('IMG_SIZE', '256')   # training resolution (256 = working resolution)
 
@@ -93,8 +90,7 @@ def launch(gpu, task):
     cmd = [PY, os.path.join(NET, 'train.py'),
            '--data_dir', DATA, '--test_ids', TESTIDS,
            '--ckpt_dir', ckpt, '--k', '5', '--fold', str(f),
-           '--img_size', IMG_SIZE, '--batch_size', bs, '--epochs', EPOCHS, '--lr', lr,
-           '--cldice_w', CLDICE_W, '--tversky_b', TVERSKY_B]
+           '--img_size', IMG_SIZE, '--batch_size', bs, '--epochs', EPOCHS, '--lr', lr]
     if GOAL_CHANNELS:
         cmd.append('--goal_channels')
     p = subprocess.Popen(cmd, env=env, stdout=log, stderr=subprocess.STDOUT, cwd=NET)

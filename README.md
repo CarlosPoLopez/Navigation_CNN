@@ -36,8 +36,9 @@ resolution is **256×256**.
 - `DoubleConv` blocks (Conv 3×3 → BatchNorm → ReLU, ×2).
 - 5-level U-Net (`features=(32,64,128,256,512)`): a deep encoder whose large receptive
   field lets the bottleneck see enough global context to plan the whole path.
-- Loss: BCE + Dice; optionally Tversky (`--tversky_b`) or clDice (`--cldice_w`) to favor
-  the topological connectivity of the path.
+- Loss: a fixed sum of three complementary terms (as in the thesis) — **BCE** (pixel) +
+  **Tversky** (region, α=0.3, β=0.7) + **clDice** (connectivity). Tversky generalizes Dice
+  (α=β=0.5) and penalizes gaps/false negatives more; clDice enforces path continuity.
 
 ## Evaluation
 

@@ -11,7 +11,7 @@
 
 # FINAL SINGLE MODEL: U-Net retrained from scratch over the WHOLE pool
 # (--fold -1, no validation), with the chosen config (lr1e-4, bs8, 256, 140ep,
-# goal + Tversky0.7 + clDice1). Saved to $RUNS/final_model/fold0/. Then a single-model
+# goal-conditioning). Saved to $RUNS/final_model/fold0/. Then a single-model
 # test (k=1). One GPU is enough.
 # Submit from the repository root:  sbatch slurm/sbatch_final_model_t4.sh
 
@@ -30,7 +30,7 @@ echo "########## FINAL SINGLE MODEL TRAINING (whole pool) ##########"
 "${PYTHON}" -u "${CODE}/train.py" \
     --data_dir "${DATA}" --test_ids "${TESTIDS}" --ckpt_dir "${CKPT}" \
     --fold -1 --img_size 256 --batch_size 8 --epochs 140 \
-    --lr 1e-4 --cldice_w 1 --tversky_b 0.7 --goal_channels
+    --lr 1e-4 --goal_channels
 
 echo
 echo "########## SINGLE MODEL TEST (k=1, threshold 0.5) ##########"
