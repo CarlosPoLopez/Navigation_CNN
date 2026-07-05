@@ -8,10 +8,9 @@ without a reference solution:
     one (bottom-right corner), using the same 50x50 goal-conditioning markers.
 
 The preprocessing is IDENTICAL to dataset.MazeDataset (wall = maze<0, 3 channels with
-the entry/exit squares, nearest resize to img_size) so the model sees the same as in
-training. By default only the overlay PNG is saved; with --save_npy the mask, rescaled
-back to the ORIGINAL resolution of the maze, is also saved as .npy (reusable in your
-pipeline).
+the entry/exit squares, nearest resize to 256) so the model sees the same as in training.
+By default only the overlay PNG is saved; with --save_npy the mask, rescaled back to the
+ORIGINAL resolution of the maze, is also saved as .npy (reusable in your pipeline).
 
 Input (--input):
   *.npz  -> dataset format: key 'laberinto' (field F, <0=wall) and, optionally,
@@ -20,18 +19,17 @@ Input (--input):
             auto (default: if there are negatives -> '<0', else '>0.5'), neg (<0),
             pos (>0), nonzero.
 
-Post-processing: by default a light morphological closing (--closing 1) is applied to
-the binary prediction, reconnecting 1-2px gaps of the path without altering its
-thickness or overlap (raises the solved rate at ~zero cost). --closing 0 disables it;
---closing 2 is more aggressive (pro-connectivity, at the cost of some Dice).
+A light morphological closing (radius 1) is applied to the binary prediction, reconnecting
+1-2px gaps of the path without altering its thickness or overlap (raises the solved rate
+at ~zero cost). The input resolution (256), the binarization threshold (0.5) and this
+closing are fixed (part of the model); edit the constants at the top to change them.
 
 Checkpoints: --ckpt_dir with fold{0..k-1}/best.pt. --k 1 = single model (fold0);
 --k 5 = ensemble (mean of sigmoids). Without --k, auto-detects how many folds there are.
 
 Usage:
-  python predict.py --input my_maze.npz --ckpt_dir ../runs/final_model --k 1
-  python predict.py --input map42.npy  --ckpt_dir ../runs/kfold/lr1e-4_bs8 --k 5
-If the model was trained with 1 channel (no goal), add --no_goal.
+  python predict.py --input my_maze.npz --ckpt_dir runs/final_model --k 1
+  python predict.py --input map42.npy  --ckpt_dir runs/kfold/lr1e-4_bs8 --k 5
 """
 
 import os
@@ -46,7 +44,10 @@ from unet import UNet
 # Reuse the metrics and error overlay from the test (same definition, no divergence).
 from net_test import dice_coef, cldice, maze_solved, overlay_error
 
-THRESHOLD = 0.727   # same as dataset.py
+THRESHOLD = 0.727      # reads the .npz 'solucion' field into a binary path mask (data)
+IMG_SIZE = 256         # fixed working resolution (same as training)
+PRED_THRESHOLD = 0.5   # fixed binarization threshold for the network output
+CLOSING = 1            # fixed morphological closing radius (post-processing)
 
 
 def _square(h, w, r0, r1, c0, c1):
@@ -81,22 +82,18 @@ def load_maze(path, wall):
     return maze.astype(np.float32), None
 
 
-def build_input(maze, img_size, goal_channels, mb, ms):
+def build_input(maze, mb, ms):
     """Same assembly as MazeDataset: 3 channels (maze + entry + exit) and nearest
-    resize to img_size. The squares are built at the ORIGINAL resolution."""
+    resize to IMG_SIZE. The squares are built at the ORIGINAL resolution."""
     h, w = maze.shape
-    if goal_channels:
-        start = _square(h, w, mb, mb + ms, mb, mb + ms)
-        end   = _square(h, w, h - mb - ms, h - mb, w - mb - ms, w - mb)
-        x = torch.tensor(np.stack([maze, start, end], 0))      # (3,H,W)
-    else:
-        x = torch.tensor(maze).unsqueeze(0)                    # (1,H,W)
-    if img_size is not None:
-        x = F.interpolate(x.unsqueeze(0), size=img_size, mode='nearest').squeeze(0)
+    start = _square(h, w, mb, mb + ms, mb, mb + ms)
+    end   = _square(h, w, h - mb - ms, h - mb, w - mb - ms, w - mb)
+    x = torch.tensor(np.stack([maze, start, end], 0))          # (3,H,W)
+    x = F.interpolate(x.unsqueeze(0), size=IMG_SIZE, mode='nearest').squeeze(0)
     return x
 
 
-def load_models(ckpt_dir, k, goal_channels, device):
+def load_models(ckpt_dir, k, device):
     """Loads fold0..k-1/best.pt. Returns a list of models in eval()."""
     models = []
     feats = (32, 64, 128, 256, 512)
@@ -106,7 +103,7 @@ def load_models(ckpt_dir, k, goal_channels, device):
             print(f'  WARNING: {ckpt} missing (fold {i} not trained).')
             continue
         state = torch.load(ckpt, map_location=device)
-        m = UNet(in_channels=3 if goal_channels else 1, features=feats).to(device)
+        m = UNet(in_channels=3, features=feats).to(device)
         m.load_state_dict(state['model'])
         m.eval()
         models.append(m)
@@ -122,18 +119,6 @@ def detect_k(ckpt_dir):
     while os.path.exists(os.path.join(ckpt_dir, f'fold{k}', 'best.pt')):
         k += 1
     return k
-
-
-def corner_box(h, w, mb, ms, is_exit=False):
-    """Boolean mask of the entry square (top-left corner) or exit square (bottom-right
-    corner), at the given (h,w) resolution. Connectivity fallback when there are NO goal
-    channels."""
-    m = np.zeros((h, w), dtype=bool)
-    if is_exit:
-        m[h - mb - ms:h - mb, w - mb - ms:w - mb] = True
-    else:
-        m[mb:mb + ms, mb:mb + ms] = True
-    return m
 
 
 def connects_regions(pred, entry, exit_):
@@ -169,7 +154,6 @@ def overlay_pred(maze, pred):
 def main(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'Device: {device}')
-    goal = not args.no_goal
 
     # 1) Maze (original resolution) and solution if it comes with one.
     maze, sol = load_maze(args.input, args.wall)
@@ -181,50 +165,41 @@ def main(args):
     k = args.k if args.k is not None else detect_k(args.ckpt_dir)
     if k <= 0:
         raise SystemExit(f'No fold*/best.pt in {args.ckpt_dir}')
-    models = load_models(args.ckpt_dir, k, goal, device)
+    models = load_models(args.ckpt_dir, k, device)
 
-    # 3) Inference at img_size. It is MEASURED and drawn at img_size (as in training and
+    # 3) Inference at IMG_SIZE. It is MEASURED and drawn at IMG_SIZE (as in training and
     #    net_test): the path is 1-2 px wide and rescaling it back would fragment it,
     #    breaking connectivity and lowering Dice. The mask that is SAVED is rescaled to
     #    the original resolution (nearest, no fragmentation) for your pipeline.
-    xb = build_input(maze, args.img_size, goal, args.marker_border,
-                     args.marker_size).unsqueeze(0).to(device)
+    xb = build_input(maze, args.marker_border, args.marker_size).unsqueeze(0).to(device)
     with torch.no_grad():
         prob_sum = None
         for m in models:
             prob = torch.sigmoid(m(xb))[0, 0].cpu()
             prob_sum = prob if prob_sum is None else prob_sum + prob
     prob = prob_sum / len(models)
-    pred = (prob > args.threshold).numpy().astype(np.float32)        # at img_size
-    # Optional post-processing: morphological closing (dilate+erode, disk r). Bridges
-    # 1-2px gaps and fills small holes WITHOUT thickening isolated noise (it is local).
-    # Raises the solved rate without touching the clDice on a good model. Applied at
-    # img_size (same resolution as the metric).
-    if args.closing > 0:
-        from skimage.morphology import closing, disk
-        pred = closing(pred > 0.5, disk(args.closing)).astype(np.float32)
-        print(f'  Post-processing: morphological closing disk r={args.closing}.')
+    pred = (prob > PRED_THRESHOLD).numpy().astype(np.float32)        # at IMG_SIZE
+    # Post-processing: morphological closing (dilate+erode, disk r=1). Bridges 1-2px gaps
+    # and fills small holes WITHOUT thickening isolated noise (it is local). Raises the
+    # solved rate without touching the clDice on a good model.
+    from skimage.morphology import closing, disk
+    pred = closing(pred > 0.5, disk(CLOSING)).astype(np.float32)
+    print(f'  Post-processing: morphological closing disk r={CLOSING}.')
     maze512 = xb[0, 0].cpu().numpy()                                 # rescaled maze
-    H = pred.shape[0]
     kind = 'ensemble' if len(models) > 1 else 'single model'
     mode = 'ensemble' if len(models) > 1 else 'single'
-    print(f'Prediction: {kind} of {len(models)} network(s), threshold {args.threshold}.')
+    print(f'Prediction: {kind} of {len(models)} network(s), threshold {PRED_THRESHOLD}.')
 
     # 4) Entry->exit connectivity (always; does not need a solution). The entry/exit
-    #    regions come from the REAL goal channels (robust to any size); without goal,
-    #    the corner squares are used as a fallback.
-    if goal:
-        entry = xb[0, 1].cpu().numpy() > 0.5
-        exit_ = xb[0, 2].cpu().numpy() > 0.5
-    else:
-        entry = corner_box(H, H, args.marker_border, args.marker_size, is_exit=False)
-        exit_ = corner_box(H, H, args.marker_border, args.marker_size, is_exit=True)
+    #    regions come from the goal channels.
+    entry = xb[0, 1].cpu().numpy() > 0.5
+    exit_ = xb[0, 2].cpu().numpy() > 0.5
     connects = connects_regions(pred, entry, exit_)
     print(f'  Connects entry-exit (BFS): {"YES" if connects else "NO"}')
 
-    # 5) Metrics vs the reference solution, if any (at img_size, like net_test).
+    # 5) Metrics vs the reference solution, if any (at IMG_SIZE, like net_test).
     if sol is not None:
-        sol512 = F.interpolate(torch.tensor(sol)[None, None], size=args.img_size,
+        sol512 = F.interpolate(torch.tensor(sol)[None, None], size=IMG_SIZE,
                                mode='nearest')[0, 0]
         sol512_np = sol512.numpy()
         d = dice_coef(torch.from_numpy(pred), sol512)
@@ -295,13 +270,6 @@ if __name__ == '__main__':
     p.add_argument('--ckpt_dir', required=True, help='folder with fold*/best.pt.')
     p.add_argument('--k', type=int, default=None,
                    help='number of folds to use: 1=single model, 5=ensemble. Default: auto-detect.')
-    p.add_argument('--no_goal', action='store_true',
-                   help='1-channel input (if the model was NOT trained with goal-conditioning).')
-    p.add_argument('--img_size', type=int, default=256)
-    p.add_argument('--threshold', type=float, default=0.5)
-    p.add_argument('--closing', type=int, default=1,
-                   help='radius of the morphological closing post-processing (0=disable, '
-                        '1=default, 2=pro-connectivity). Bridges small gaps of the path.')
     p.add_argument('--marker_size', type=int, default=50,
                    help='side of the entry/exit square (same as in training).')
     p.add_argument('--marker_border', type=int, default=5,

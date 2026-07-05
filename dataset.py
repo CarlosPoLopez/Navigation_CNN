@@ -8,6 +8,7 @@ import random
 import argparse
 
 THRESHOLD = 0.727   # same as in the dataset generation/filtering
+IMG_SIZE = 256      # fixed working resolution (all inputs are resized to IMG_SIZE x IMG_SIZE)
 
 
 def _square(h, w, r0, r1, c0, c1):
@@ -66,16 +67,12 @@ class MazeDataset(Dataset):
     """Takes a LIST of files (not a directory), so that train.py controls exactly
     which samples go into each split. augment=True only on train."""
 
-    def __init__(self, files, img_size=256, augment=False,
-                 goal_channels=False, marker_size=50, marker_border=5):
+    def __init__(self, files, augment=False, marker_size=50, marker_border=5):
         self.files = list(files)
-        self.img_size = img_size
         self.augment = augment
-        # goal_channels: adds 2 input channels with the entry and exit "rooms" of the
-        # maze. They are marker_size x marker_size (50x50) squares at marker_border (5)
-        # px from the border, SAME as in the generation (entry [5:55,5:55], exit
-        # [N-55:N-5, N-55:N-5]).
-        self.goal_channels = goal_channels
+        # Goal-conditioning markers (fixed): marker_size x marker_size (50x50) squares at
+        # the entry and exit "rooms", marker_border (5) px from the border, SAME as in the
+        # generation (entry [5:55,5:55], exit [N-55:N-5, N-55:N-5]).
         self.marker_size = marker_size
         self.marker_border = marker_border
         if not self.files:
@@ -108,29 +105,23 @@ class MazeDataset(Dataset):
         # Label: final field u -> binary (1=path, 0=background)
         solution = (data['solucion'] >= THRESHOLD).astype(np.float32)
 
-        if self.goal_channels:
-            # 2 extra channels: a 50x50 square at the entry "room" [5:55,5:55] and at
-            # the exit one [H-55:H-5, W-55:W-5], SAME as the generation. They are built
-            # BEFORE augmentation so they rotate/flip together with the maze (always
-            # paired with their real endpoints) and get resized the same way. The
-            # network no longer has to guess the endpoints.
-            h, w = maze.shape
-            b, s = self.marker_border, self.marker_size
-            start_ch = _square(h, w, b, b + s, b, b + s)
-            end_ch   = _square(h, w, h - b - s, h - b, w - b - s, w - b)
-            x = torch.tensor(np.stack([maze, start_ch, end_ch], 0))  # (3,H,W)
-        else:
-            x = torch.tensor(maze).unsqueeze(0)   # (1, H, W) --> adds a channel (color)
+        # 3-channel input (goal-conditioning, fixed): the maze plus a 50x50 square at the
+        # entry "room" [5:55,5:55] and the exit one [H-55:H-5, W-55:W-5]. Built BEFORE
+        # augmentation so they rotate/flip together with the maze (always paired with
+        # their real endpoints). The network no longer has to guess the endpoints.
+        h, w = maze.shape
+        b, s = self.marker_border, self.marker_size
+        start_ch = _square(h, w, b, b + s, b, b + s)
+        end_ch   = _square(h, w, h - b - s, h - b, w - b - s, w - b)
+        x = torch.tensor(np.stack([maze, start_ch, end_ch], 0))  # (3,H,W)
         y = torch.tensor(solution).unsqueeze(0)
 
         if self.augment:
             x, y = self._aug(x, y)
 
-        # Resize to img_size x img_size to unify sizes.
-        if self.img_size is not None:
-            x = F.interpolate(x.unsqueeze(0), size=self.img_size, mode='nearest').squeeze(0)
-            y = F.interpolate(y.unsqueeze(0), size=self.img_size, mode='nearest').squeeze(0)
-
+        # Resize to the fixed working resolution (IMG_SIZE x IMG_SIZE).
+        x = F.interpolate(x.unsqueeze(0), size=IMG_SIZE, mode='nearest').squeeze(0)
+        y = F.interpolate(y.unsqueeze(0), size=IMG_SIZE, mode='nearest').squeeze(0)
         return x, y
 
 

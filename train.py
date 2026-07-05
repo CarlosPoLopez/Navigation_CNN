@@ -141,24 +141,22 @@ def main(args):
         val_files   = [pool[i] for i in idx_val]
         print(f'Fold {args.fold}/{args.k}: train={len(train_files)}  val={len(val_files)}')
 
-    train_ds = MazeDataset(train_files, img_size=args.img_size,
-                           augment=not args.no_augment,
-                           goal_channels=args.goal_channels)
+    train_ds = MazeDataset(train_files, augment=not args.no_augment)
     if args.no_augment:
         print('WARNING: augmentation DISABLED (--no_augment) -> train without D4 symmetries.')
     train_loader = DataLoader(train_ds, batch_size=args.batch_size,
                               shuffle=True, num_workers=4, pin_memory=True)
     if not no_val:
-        val_ds     = MazeDataset(val_files, img_size=args.img_size, augment=False,
-                                 goal_channels=args.goal_channels)
+        val_ds     = MazeDataset(val_files, augment=False)
         val_loader = DataLoader(val_ds, batch_size=args.batch_size,
                                 shuffle=False, num_workers=4, pin_memory=True)
 
     # Creates the network with random weights. 5-level U-Net: the extra downsample gives
     # the bottleneck more global context (8x8 px @256) to plan the path, WITHOUT lowering
-    # the output resolution (which would break the thin path).
+    # the output resolution (which would break the thin path). 3-channel input (fixed
+    # goal-conditioning).
     features = (32, 64, 128, 256, 512)
-    model = UNet(in_channels=3 if args.goal_channels else 1, features=features).to(device)
+    model = UNet(in_channels=3, features=features).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, patience=5, factor=0.5)  # checks val_loss every 5 epochs; if it does not drop, halves the lr
@@ -222,14 +220,9 @@ if __name__ == '__main__':
                         help='k-fold fold (0..k-1). Use -1 for FINAL MODEL: '
                              'trains on the whole pool without validation (saves to fold0/).')
     parser.add_argument('--seed',       type=int,   default=42)
-    parser.add_argument('--img_size',   type=int,   default=256)
     parser.add_argument('--batch_size', type=int,   default=4)
     parser.add_argument('--epochs',     type=int,   default=50)
     parser.add_argument('--lr',         type=float, default=1e-4)
-    parser.add_argument('--goal_channels', action='store_true',
-                        help='goal-conditions the network: adds 2 input channels with the '
-                             '(fixed) entry and exit of the maze. Input 1->3 channels. '
-                             'Prevents the network from guessing the endpoints.')
     parser.add_argument('--no_augment', action='store_true',
                         help='DISABLES data augmentation (D4 symmetries: rot90 + flips) on '
                              'train. Enabled by default. For ablation: check whether '

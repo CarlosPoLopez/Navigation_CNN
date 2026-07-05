@@ -26,7 +26,6 @@ export DATA_DIR="${DATA_DIR:-$CODE/data/Dataset_Matrices}"
 export TEST_IDS="${TEST_IDS:-$CODE/data/test_ids.txt}"
 export RUNS_ROOT="${RUNS_ROOT:-$CODE/runs/cross_validation_final}"
 export NGPU="${NGPU:-5}"                            # number of GPUs on the node
-export IMG_SIZE="${IMG_SIZE:-256}"
 command -v module >/dev/null 2>&1 && { module purge; module load cesga/system miniconda3; }
 # -------------------------------------------------------------------------------
 

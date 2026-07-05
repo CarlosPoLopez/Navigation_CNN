@@ -36,7 +36,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 from dataset import (MazeDataset, list_samples, load_test_ids,
                      kfold_partition)
 from unet import UNet
-from net_test import (dice_coef, cldice, maze_solved, save_overlays)
+from net_test import (dice_coef, cldice, maze_solved, save_overlays, THRESHOLD)
 
 
 def val_files_for(args):
@@ -57,12 +57,11 @@ def evaluate_one(ckpt_dir, val_files, args, device):
         return None
     state = torch.load(ckpt, map_location=device)
     feats = (32, 64, 128, 256, 512)
-    model = UNet(in_channels=3 if args.goal_channels else 1, features=feats).to(device)
+    model = UNet(in_channels=3, features=feats).to(device)
     model.load_state_dict(state['model'])
     model.eval()
 
-    ds = MazeDataset(val_files, img_size=args.img_size, augment=False,
-                     goal_channels=args.goal_channels)
+    ds = MazeDataset(val_files, augment=False)
     dices, cldices, svs, rows = [], [], [], []
     overlays = []  # heap bounded to n_overlays: (key, counter, dict) - best/worst/first
     _ov_cnt = 0    # breaks ties in the heap without comparing the dicts
@@ -74,7 +73,7 @@ def evaluate_one(ckpt_dir, val_files, args, device):
             gt = (y[0] > 0.5).float()
             gt_np = gt.numpy()
             prob = torch.sigmoid(model(x))[0, 0].cpu()
-            pred = (prob > args.threshold).float()
+            pred = (prob > THRESHOLD).float()
             pred_np = pred.numpy()
             d = dice_coef(pred, gt)
             cl = cldice(pred_np, gt_np)
@@ -126,7 +125,7 @@ def main(args):
 
     val_files = val_files_for(args)
     print(f'\n  Evaluation on VALIDATION (fold {args.fold}, k={args.k}, seed={args.seed}) '
-          f'- {len(val_files)} held-out samples  [goal_channels={args.goal_channels}]\n')
+          f'- {len(val_files)} held-out samples\n')
     print(f'  {"config":42} {"Dice":>7} {"clDice":>8} {"solved":>10}')
     print(f'  {"-"*42} {"-"*7} {"-"*8} {"-"*10}')
 
@@ -158,12 +157,8 @@ if __name__ == '__main__':
     p.add_argument('--k',          type=int,   default=5)
     p.add_argument('--fold',       type=int,   default=0)
     p.add_argument('--seed',       type=int,   default=42)
-    p.add_argument('--img_size',   type=int,   default=256)
-    p.add_argument('--threshold',  type=float, default=0.5)
     p.add_argument('--margin',     type=int,   default=8,
                    help='tolerance (px) at entry/exit for the solving BFS.')
-    p.add_argument('--goal_channels', action='store_true',
-                   help='3-channel input (must match the flag used when training).')
     p.add_argument('--n_overlays', type=int, default=0,
                    help='saves N overlays (maze/real/pred with TP/FN/FP map) in <ckpt_dir>/val_overlays/.')
     p.add_argument('--overlay_sel', choices=['first', 'best', 'worst'], default='best',

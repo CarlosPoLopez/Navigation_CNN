@@ -138,28 +138,26 @@ python dataset.py --data_dir data/Dataset_Matrices --output data/test_ids.txt
 
 ```bash
 python train.py --ckpt_dir runs/my_model \
-    --k 5 --fold 0 --img_size 256 \
-    --lr 1e-4 --batch_size 8 --epochs 140 \
-    --goal_channels
+    --k 5 --fold 0 --lr 1e-4 --batch_size 8 --epochs 140
 ```
 For the final single model, train on the whole pool with `--fold -1` (saved to `fold0/`).
 
 **3. Evaluate on the frozen test set** (ensemble of the k folds, or `--k 1` for a single model):
 
 ```bash
-python net_test.py --ckpt_dir runs/my_model \
-    --k 5 --img_size 256 --threshold 0.5 --closing 1 \
-    --goal_channels
+python net_test.py --ckpt_dir runs/my_model --k 5
 ```
 
 **4. Solve a single maze** (any `.npz` from the dataset, or a raw 2D `.npy`):
 
 ```bash
-python predict.py --input maze.npy --ckpt_dir runs/my_model --img_size 256
+python predict.py --input maze.npy --ckpt_dir runs/my_model --k 1
 ```
 
-> The `--goal_channels` flag must be the **same** at train, test and predict time (it
-> changes the number of input channels). See `--help` on each script for all options.
+> The input format (3-channel goal-conditioning), the working resolution (256), the test
+> threshold (0.5) and the morphological closing (radius 1) are **fixed** — they are part
+> of the model, not CLI options. To change them, edit the constants at the top of the
+> scripts. See `--help` for the remaining options.
 
 **Model selection** (optional, `analysis/`): sweep the learning-rate × batch-size grid
 (`analysis/dispatch_grid.py`), then rank configs on validation with

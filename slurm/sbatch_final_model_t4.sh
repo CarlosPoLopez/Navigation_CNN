@@ -29,11 +29,10 @@ CKPT="$RUNS/final_model"
 echo "########## FINAL SINGLE MODEL TRAINING (whole pool) ##########"
 "${PYTHON}" -u "${CODE}/train.py" \
     --data_dir "${DATA}" --test_ids "${TESTIDS}" --ckpt_dir "${CKPT}" \
-    --fold -1 --img_size 256 --batch_size 8 --epochs 140 \
-    --lr 1e-4 --goal_channels
+    --fold -1 --batch_size 8 --epochs 140 --lr 1e-4
 
 echo
 echo "########## SINGLE MODEL TEST (k=1, threshold 0.5) ##########"
 "${PYTHON}" -u "${CODE}/net_test.py" \
     --data_dir "${DATA}" --test_ids "${TESTIDS}" \
-    --ckpt_dir "${CKPT}" --k 1 --goal_channels --n_overlays 12
+    --ckpt_dir "${CKPT}" --k 1 --n_overlays 12

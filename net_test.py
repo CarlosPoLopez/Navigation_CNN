@@ -40,6 +40,10 @@ def apply_closing(pred_np, r):
 from dataset import MazeDataset, list_samples, load_test_ids
 from unet import UNet
 
+# Fixed model/inference settings (part of the model, not tunable from the CLI):
+THRESHOLD = 0.5   # binarization threshold applied to the sigmoid output
+CLOSING = 1       # radius of the morphological closing post-processing
+
 
 # -- Metrics ----------------------------------------------------------------------
 
@@ -191,8 +195,7 @@ def main(args):
     test_files = [f for f in files if os.path.basename(f) in test_ids]
     print(f'Test: {len(test_files)} samples (out of {len(files)} total).')
 
-    test_ds = MazeDataset(test_files, img_size=args.img_size, augment=False,
-                          goal_channels=args.goal_channels)
+    test_ds = MazeDataset(test_files, augment=False)
 
     # 2) Load the available checkpoints of each fold.
     models = {}
@@ -203,7 +206,7 @@ def main(args):
             continue
         state = torch.load(ckpt, map_location=device)
         feats = (32, 64, 128, 256, 512)
-        model = UNet(in_channels=3 if args.goal_channels else 1, features=feats).to(device)
+        model = UNet(in_channels=3, features=feats).to(device)
         model.load_state_dict(state['model'])
         model.eval()
         models[k] = model
@@ -233,8 +236,7 @@ def main(args):
             for k in order:
                 prob = torch.sigmoid(models[k](x))[0, 0].cpu()
                 prob_sum += prob
-                pk_np = apply_closing((prob > args.threshold).numpy().astype(np.float32),
-                                      args.closing)
+                pk_np = apply_closing((prob > THRESHOLD).numpy().astype(np.float32), CLOSING)
                 pred_k = torch.from_numpy(pk_np)
                 d = dice_coef(pred_k, gt)
                 dice_fold[k].append(d)
@@ -242,8 +244,7 @@ def main(args):
                 sv_fold[k].append(maze_solved(pk_np, gt_np, args.margin))
 
             prob_ens = prob_sum / len(order)
-            pe_np = apply_closing((prob_ens > args.threshold).numpy().astype(np.float32),
-                                  args.closing)
+            pe_np = apply_closing((prob_ens > THRESHOLD).numpy().astype(np.float32), CLOSING)
             pred_ens = torch.from_numpy(pe_np)
             d = dice_coef(pred_ens, gt)
             cl = cldice(pe_np, gt_np)
@@ -320,19 +321,12 @@ if __name__ == '__main__':
                    help='file listing the frozen test samples.')
     p.add_argument('--ckpt_dir',   default='runs/baseline',
                    help='folder with fold*/best.pt; results go here (test_metrics.csv, test_overlays/).')
-    p.add_argument('--k',          type=int,   default=5)
-    p.add_argument('--img_size',   type=int,   default=256)
-    p.add_argument('--threshold',  type=float, default=0.5)
-    p.add_argument('--closing',    type=int,   default=1,
-                   help='radius of the morphological closing post-processing applied BEFORE '
-                        'measuring (0=disable, 1=default, 2=pro-connectivity).')
+    p.add_argument('--k',          type=int,   default=5,
+                   help='number of folds to load: 5 = ensemble, 1 = single model (fold0).')
     p.add_argument('--n_overlays', type=int,   default=12)
     p.add_argument('--overlay_sel', choices=['first', 'best', 'worst'], default='best',
                    help="which samples to save as overlay: 'best' (N best, default), "
                         "'worst' (N worst) or 'first' (N first). Order: solved desc/asc, then Dice.")
     p.add_argument('--margin',     type=int,   default=8,
                    help='tolerance (px) at entry/exit for the solving BFS.')
-    p.add_argument('--goal_channels', action='store_true',
-                   help='3-channel input (maze + entry + exit). Must match the flag used '
-                        'when training the model.')
     main(p.parse_args())

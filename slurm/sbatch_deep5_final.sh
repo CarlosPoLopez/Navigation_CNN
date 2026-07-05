@@ -33,8 +33,7 @@ for f in 0 1 2 3 4; do
   echo "[GPU $f] START deep fold=$f"
   CUDA_VISIBLE_DEVICES=$f "${PYTHON}" "${CODE}/train.py" \
       --data_dir "${DATA}" --test_ids "${TESTIDS}" --ckpt_dir "${CKPT}" \
-      --k 5 --fold $f --img_size 256 --batch_size 8 --epochs 140 \
-      --lr 1e-4 --goal_channels \
+      --k 5 --fold $f --batch_size 8 --epochs 140 --lr 1e-4 \
       > "$LOGDIR/deep5_final_fold${f}.log" 2>&1 &
 done
 wait
@@ -43,4 +42,4 @@ echo "=== k=5 TRAININGS FINISHED ==="
 echo "################## ENSEMBLE TEST (threshold 0.5) ##################"
 "${PYTHON}" -u "${CODE}/net_test.py" \
     --data_dir "${DATA}" --test_ids "${TESTIDS}" \
-    --ckpt_dir "${CKPT}" --k 5 --goal_channels --n_overlays 12
+    --ckpt_dir "${CKPT}" --k 5 --n_overlays 12

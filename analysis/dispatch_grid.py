@@ -42,9 +42,8 @@ BSS    = os.environ.get('BSS', '16,8,4,2').split(',')         # bs16 FIRST; bs2/
 FOLDS  = [0, 1, 2, 3, 4]
 EPOCHS = '140'
 NGPU   = int(os.environ.get('NGPU', '8'))
-# Input config: goal-conditioning ON (the loss is fixed in train.py: BCE+Tversky+clDice).
-GOAL_CHANNELS = os.environ.get('GOAL_CHANNELS', '1') == '1'
-IMG_SIZE      = os.environ.get('IMG_SIZE', '256')   # training resolution (256 = working resolution)
+# The input (3-channel, 256px), the loss (BCE+Tversky+clDice) and the 5-level U-Net are
+# all fixed in train.py; only lr x batch x fold are swept here.
 
 os.makedirs(LOGDIR, exist_ok=True)
 
@@ -90,9 +89,7 @@ def launch(gpu, task):
     cmd = [PY, os.path.join(NET, 'train.py'),
            '--data_dir', DATA, '--test_ids', TESTIDS,
            '--ckpt_dir', ckpt, '--k', '5', '--fold', str(f),
-           '--img_size', IMG_SIZE, '--batch_size', bs, '--epochs', EPOCHS, '--lr', lr]
-    if GOAL_CHANNELS:
-        cmd.append('--goal_channels')
+           '--batch_size', bs, '--epochs', EPOCHS, '--lr', lr]
     p = subprocess.Popen(cmd, env=env, stdout=log, stderr=subprocess.STDOUT, cwd=NET)
     print(f'[GPU {gpu}] START  lr={lr} bs={bs} fold={f}', flush=True)
     return (p, task, log, time.time())
