@@ -34,7 +34,7 @@ resolution is **256×256**.
 
 *Left to right: an input maze, its reference solution from Part 1, and the U-Net's
 prediction — green = path correctly found, red/blue = small deviations. Here the predicted
-path connects entry to exit (**solved**), with Dice 0.89 / clDice 0.91.*
+path connects entry to exit (**solved**), with Dice 0.97 / clDice 1.00.*
 
 ## Architecture
 
