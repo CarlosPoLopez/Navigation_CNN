@@ -73,11 +73,12 @@ Fully self-contained demo — no dataset needed:
 # 1. download the weights into runs/final_model/fold0/best.pt
 python download_model.py
 
-# 2. generate a random maze (1=wall, 0=corridor), saved as maze.npy (+ a preview PNG)
-python generate_maze.py --out maze.npy --png
+# 2. generate a random maze (1=wall, 0=corridor) into any folder (created if needed),
+#    saved as maze.npy (+ a preview maze.png)
+python generate_maze.py --out my_tests/maze.npy --png
 
-# 3. solve it — writes pred_maze_single.png (maze + predicted path) next to the input
-python predict.py --input maze.npy --ckpt_dir runs/final_model --k 1
+# 3. solve it — writes pred_maze_single.png (maze + predicted path) in the same folder
+python predict.py --input my_tests/maze.npy --ckpt_dir runs/final_model --k 1
 ```
 
 ![Solving a freshly generated maze](assets/prediction_generated_maze.png)
@@ -87,6 +88,9 @@ the entry (bottom-left) to the exit (top-right).*
 
 `predict.py` also accepts a dataset `.npz` (from Part 1, with a reference `solution`); in
 that case it additionally reports Dice / clDice / solved against the ground truth.
+Useful options: `--out_dir` (write the result somewhere else) and `--save_npy` (also save
+the predicted mask) in `predict.py`; `--type perfect` (single route instead of several),
+`--nc 5` (simpler maze, default 9) and `--seed` (reproducible) in `generate_maze.py`.
 
 ## Layout
 
